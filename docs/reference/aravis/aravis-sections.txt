@@ -19,6 +19,7 @@ arv_camera_create_stream
 arv_camera_get_device
 arv_camera_get_vendor_name
 arv_camera_get_model_name
+arv_camera_get_device_serial_number
 arv_camera_get_device_id
 arv_camera_get_sensor_size
 arv_camera_set_region
@@ -72,6 +73,7 @@ arv_camera_get_exposure_time
 arv_camera_get_exposure_time_bounds
 arv_camera_set_exposure_time_auto
 arv_camera_get_exposure_time_auto
+arv_camera_set_exposure_mode
 arv_camera_is_gain_available
 arv_camera_is_gain_auto_available
 arv_camera_set_gain
@@ -97,6 +99,8 @@ arv_camera_set_float
 arv_camera_set_integer
 arv_camera_set_string
 ArvGvPacketSizeAdjustment
+arv_camera_set_range_check_policy
+arv_camera_set_register_cache_policy
 arv_camera_is_gv_device
 arv_camera_gv_get_n_stream_channels
 arv_camera_gv_select_stream_channel
@@ -113,6 +117,7 @@ arv_camera_uv_get_bandwidth
 arv_camera_uv_get_bandwidth_bounds
 arv_camera_uv_is_bandwidth_control_available
 arv_camera_uv_set_bandwidth
+arv_camera_are_chunks_available
 arv_camera_get_chunk_mode
 arv_camera_get_chunk_state
 arv_camera_set_chunk_mode
@@ -122,6 +127,9 @@ arv_camera_create_chunk_parser
 ArvAcquisitionMode
 arv_acquisition_mode_to_string
 arv_acquisition_mode_from_string
+ArvExposureMode
+arv_exposure_mode_from_string
+arv_exposure_mode_to_string
 <SUBSECTION Standard>
 ARV_CAMERA
 ARV_IS_CAMERA
@@ -561,6 +569,8 @@ arv_gc_property_node_get_display_notation
 arv_gc_property_node_new_display_notation
 arv_gc_property_node_get_display_precision
 arv_gc_property_node_new_display_precision
+arv_gc_property_node_new_streamable
+arv_gc_property_node_get_streamable
 <SUBSECTION Standard>
 arv_gc_property_node_get_type
 ARV_GC_PROPERTY_NODE
@@ -924,6 +934,7 @@ ArvGcIsLinear
 ArvGcVisibility
 ArvGcRepresentation
 ArvGcDisplayNotation
+ArvGcStreamable
 arv_gc_new
 arv_gc_get_node
 arv_gc_get_device

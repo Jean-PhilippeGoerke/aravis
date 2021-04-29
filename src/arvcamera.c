@@ -108,6 +108,8 @@ typedef struct {
 	ArvCameraVendor vendor;
 	ArvCameraSeries series;
 
+	gboolean has_serial_number;
+
 	gboolean has_gain;
 	gboolean gain_raw_as_float;
 
@@ -192,6 +194,29 @@ arv_camera_get_model_name (ArvCamera *camera, GError **error)
 }
 
 /**
+ * arv_camera_get_device_serial_number:
+ * @camera: a #ArvCamera
+ * @error: a #GError placeholder, %NULL to ignore
+ *
+ * Returns: the camera device serial number.
+ *
+ * Since: 0.8.8
+ */
+
+const char *
+arv_camera_get_device_serial_number (ArvCamera *camera, GError **error)
+{
+	ArvCameraPrivate *priv = arv_camera_get_instance_private (camera);
+
+	g_return_val_if_fail (ARV_IS_CAMERA (camera), NULL);
+
+	if (priv->has_serial_number)
+	    return arv_camera_get_string (camera, "DeviceSerialNumber", error);
+
+	return arv_camera_get_device_id (camera, error);
+}
+
+/**
  * arv_camera_get_device_id:
  * @camera: a #ArvCamera
  * @error: a #GError placeholder, %NULL to ignore
@@ -245,7 +270,7 @@ arv_camera_get_sensor_size (ArvCamera *camera, gint *width, gint *height, GError
  * @error: a #GError placeholder, %NULL to ignore
  *
  * Defines the region of interest which will be transmitted in the video
- * stream.
+ * stream. Negative @x or @y values, or not strictly positive @width or @height values are ignored.
  *
  * Since: 0.8.0
  */
@@ -452,7 +477,7 @@ arv_camera_get_height_increment (ArvCamera *camera, GError **error)
  * @error: a #GError placeholder, %NULL to ignore
  *
  * Defines binning in both directions. Not all cameras support this
- * feature.
+ * feature. Negative @dx or @dy values are ignored.
  *
  * Since: 0.8.0
  */
@@ -1361,7 +1386,7 @@ arv_camera_software_trigger (ArvCamera *camera, GError **error)
  * @error: a #GError placeholder, %NULL to ignore
  *
  * Sets exposure time. User should take care to set a value compatible with
- * the desired frame rate.
+ * the desired frame rate. Negative @exposure_time_us is ignored.
  *
  * Since: 0.8.0
  */
@@ -1521,6 +1546,23 @@ arv_camera_get_exposure_time_auto (ArvCamera *camera, GError **error)
 	return arv_auto_from_string (arv_camera_get_string (camera, "ExposureAuto", error));
 }
 
+/*
+ * arv_camera_set_exposure_mode:
+ * @camera: a #ArvCamera
+ * @exspoure_mode: exposure mode
+ * @error: a #GError placeholder, %NULL to ignore
+ *
+ * Defines acquisition mode.
+ *
+ * Since: 0.8.7
+ */
+
+void
+arv_camera_set_exposure_mode (ArvCamera *camera, ArvExposureMode acquisition_mode, GError **error)
+{
+	arv_camera_set_string (camera, "ExposureMode", arv_exposure_mode_to_string (acquisition_mode), error);
+}
+
 /* Analog control */
 
 /**
@@ -1529,7 +1571,7 @@ arv_camera_get_exposure_time_auto (ArvCamera *camera, GError **error)
  * @gain: gain value
  * @error: a #GError placeholder, %NULL to ignore
  *
- * Sets the gain of the ADC converter.
+ * Sets the gain of the ADC converter. Negative @gain is ignored.
  *
  * Since: 0.8.0
  */
@@ -2316,6 +2358,56 @@ arv_camera_is_feature_available (ArvCamera *camera, const char *feature, GError 
 }
 
 /**
+ * arv_camera_set_register_cache_policy:
+ * @camera: a #ArvCamera
+ * @policy: cache policy
+ *
+ * Sets the Genicam register cache policy.
+ *
+ * <warning><para>Be aware that some camera may have wrong Cachable properties defined in their Genicam metadata, which
+ * may lead to incorrect readouts. Using the debug cache policy, and activating genicam debug output (export
+ * ARV_DEBUG=genicam), can help you to check the cache validity. In this mode, every time the cache content is not in
+ * sync with the actual register value, a debug message is printed on the console.</para></warning>
+ *
+ * Since: 0.8.8
+ */
+
+void
+arv_camera_set_register_cache_policy (ArvCamera *camera, ArvRegisterCachePolicy policy)
+{
+	ArvCameraPrivate *priv = arv_camera_get_instance_private (camera);
+
+	g_return_if_fail (ARV_IS_CAMERA (camera));
+
+	arv_device_set_register_cache_policy (priv->device, policy);
+}
+
+/**
+ * arv_camera_set_range_check_policy:
+ * @camera: a #ArvCamera
+ * @policy: range check policy
+ *
+ * Sets the feature range check policy. When enabled, before being set, the value of all nodes with an #ArvGcFloat or
+ * #ArvGcInteger interface will be checked against their Min and Max properties.
+ *
+ * <warning><para>Be aware that some camera may have wrong definition of Min and Max, as this check is defined as not
+ * mandatory in the Genicam specification. If this is the case, it will not possible to set the value of the features
+ * with faulty Min or Max definition. Range check is disabled by default.</para></warning>
+ *
+ * Since: 0.8.8
+ */
+
+void arv_camera_set_range_check_policy	(ArvCamera *camera, ArvRangeCheckPolicy policy)
+{
+	ArvCameraPrivate *priv = arv_camera_get_instance_private (camera);
+
+	g_return_if_fail (ARV_IS_CAMERA (camera));
+
+	arv_device_set_range_check_policy (priv->device, policy);
+}
+
+
+/**
  * arv_camera_is_gv_device:
  * @camera: a #ArvCamera
  *
@@ -2358,7 +2450,7 @@ arv_camera_gv_get_n_stream_channels (ArvCamera *camera, GError **error)
  * @channel_id: id of the channel to select
  * @error: a #GError placeholder, %NULL to ignore
  *
- * Select the current stream channel.
+ * Select the current stream channel. Negative @channel_id is ignored.
  *
  * Since: 0.8.0
  */
@@ -2366,10 +2458,22 @@ arv_camera_gv_get_n_stream_channels (ArvCamera *camera, GError **error)
 void
 arv_camera_gv_select_stream_channel (ArvCamera *camera, gint channel_id, GError **error)
 {
+	GError *local_error = NULL;
+	gboolean available;
+
 	if (channel_id < 0)
 		return;
 
 	g_return_if_fail (arv_camera_is_gv_device (camera));
+
+	available = arv_camera_is_feature_available (camera, "GevStreamChannelSelector", &local_error);
+	if (local_error != NULL) {
+		g_propagate_error (error, local_error);
+		return;
+	}
+
+	if (!available && channel_id == 0)
+		return;
 
 	arv_camera_set_integer (camera, "GevStreamChannelSelector", channel_id, error);
 }
@@ -2387,7 +2491,19 @@ arv_camera_gv_select_stream_channel (ArvCamera *camera, gint channel_id, GError 
 int
 arv_camera_gv_get_current_stream_channel (ArvCamera *camera, GError **error)
 {
+	GError *local_error = NULL;
+	gboolean available;
+
 	g_return_val_if_fail (arv_camera_is_gv_device (camera), 0);
+
+	available = arv_camera_is_feature_available (camera, "GevStreamChannelSelector", &local_error);
+	if (local_error != NULL) {
+		g_propagate_error (error, local_error);
+		return 0;
+	}
+
+	if (!available)
+		return 0;
 
 	return arv_camera_get_integer (camera, "GevStreamChannelSelector", error);
 }
@@ -2400,7 +2516,7 @@ arv_camera_gv_get_current_stream_channel (ArvCamera *camera, GError **error)
  *
  * Configure the inter packet delay to insert between each packet for the current stream
  * channel. This can be used as a crude flow-control mechanism if the application or the network
- * infrastructure cannot keep up with the packets coming from the device.
+ * infrastructure cannot keep up with the packets coming from the device. Negative @delay_ns is ignored.
  *
  * Since: 0.8.0
  */
@@ -2423,8 +2539,15 @@ arv_camera_gv_set_packet_delay (ArvCamera *camera, gint64 delay_ns, GError **err
 		return;
 	}
 
-	if (tick_frequency <= 0)
+	if (tick_frequency <= 0) {
+		if (!arv_camera_is_feature_available (camera, "GevSCPD", NULL))
+			g_set_error (error, ARV_DEVICE_ERROR, ARV_DEVICE_ERROR_FEATURE_NOT_FOUND,
+				     "GevSCPD not not found");
+		else
+			g_set_error (error, ARV_DEVICE_ERROR, ARV_DEVICE_ERROR_PROTOCOL_ERROR,
+				     "Device returned an invalid timestamp tick frequency");
 		return;
+	}
 
 	value = tick_frequency * delay_ns / 1000000000LL;
 	arv_camera_set_integer (camera, "GevSCPD", value, error);
@@ -2446,8 +2569,18 @@ arv_camera_gv_get_packet_delay (ArvCamera *camera, GError **error)
 	GError *local_error = NULL;
 	gint64 tick_frequency;
 	gint64 value;
+	gboolean available;
 
 	g_return_val_if_fail (arv_camera_is_gv_device (camera), 0);
+
+	available = arv_camera_is_feature_available (camera, "GevSCPD", &local_error);
+	if (local_error != NULL) {
+		g_propagate_error (error, local_error);
+		return 0;
+	}
+
+	if (!available)
+		return 0;
 
 	tick_frequency = arv_camera_get_integer (camera, "GevTimestampTickFrequency", &local_error);
 	if (local_error != NULL) {
@@ -2478,6 +2611,7 @@ arv_camera_gv_get_packet_delay (ArvCamera *camera, GError **error)
  *
  * This does not include data leader and data trailer and the last data packet which might be of
  * smaller size (since packet size is not necessarily a multiple of block size for stream channel).
+ * Negative @packet_size is ignored.
  *
  * Since: 0.8.0
  */
@@ -2635,8 +2769,10 @@ arv_camera_uv_is_bandwidth_control_available (ArvCamera *camera, GError **error)
 /**
  * arv_camera_uv_set_bandwidth:
  * @camera: a #ArvCamera
- * @bandwidth: Desired bandwith limit in megabits/sec. Set to 0 to disable limit mode.
+ * @bandwidth: Bandwith limit, in megabits/sec
  * @error: a #GError placeholder, %NULL to ignore
+ *
+ * Set the bandwith limit or, if @bandwith is not strictly positive, disable the limit.
  *
  * Since: 0.8.0
  */
@@ -2692,6 +2828,22 @@ void
 arv_camera_uv_get_bandwidth_bounds (ArvCamera *camera, guint *min, guint *max, GError **error)
 {
 	arv_camera_get_integer_bounds_as_guint (camera, "DeviceLinkThroughputLimit", min, max, error);
+}
+
+/**
+ * arv_camera_are_chunks_available:
+ * @camera: a #ArvCamera
+ * @error: a #GError placeholder, %NULL to ignore
+ *
+ * Returns: %TRUE if chunk data are available
+ *
+ * Since: 0.8.8
+ */
+
+gboolean
+arv_camera_are_chunks_available	(ArvCamera *camera, GError **error)
+{
+	return arv_camera_is_feature_available (camera, "ChunkModeActive", error);
 }
 
 /**
@@ -3038,6 +3190,8 @@ arv_camera_constructed (GObject *object)
 
 	priv->vendor = vendor;
 	priv->series = series;
+
+	priv->has_serial_number = ARV_IS_GC_STRING (arv_device_get_feature (priv->device, "DeviceSerialNumber"));
 
 	priv->has_gain = ARV_IS_GC_FLOAT (arv_device_get_feature (priv->device, "Gain"));
 	priv->gain_raw_as_float = ARV_IS_GC_FLOAT (arv_device_get_feature (priv->device, "GainRaw"));
