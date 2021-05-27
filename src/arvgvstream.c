@@ -257,7 +257,7 @@ _process_data_leader (ArvGvStreamThreadData *thread_data,
 	}
 
 	frame->buffer->priv->payload_type = arv_gvsp_packet_get_buffer_payload_type (packet);
-	frame->buffer->priv->frame_id = arv_gvsp_packet_get_frame_id (packet);
+	frame->buffer->priv->frame_id = frame->frame_id;
 	frame->buffer->priv->chunk_endianness = G_BIG_ENDIAN;
 
 	frame->buffer->priv->system_timestamp_ns = g_get_real_time() * 1000LL;
@@ -538,8 +538,6 @@ _missing_packet_check (ArvGvStreamThreadData *thread_data,
 static void
 _close_frame (ArvGvStreamThreadData *thread_data, ArvGvStreamFrameData *frame)
 {
-	gint64 current_time_us;
-
 	if (frame->buffer->priv->status == ARV_BUFFER_STATUS_SUCCESS)
 		thread_data->n_completed_buffers++;
 	else
@@ -562,11 +560,10 @@ _close_frame (ArvGvStreamThreadData *thread_data, ArvGvStreamFrameData *frame)
 				       ARV_STREAM_CALLBACK_TYPE_BUFFER_DONE,
 				       frame->buffer);
 
-	current_time_us = g_get_monotonic_time ();
 	if (thread_data->statistic_count > 5) {
 		arv_statistic_fill (thread_data->statistic, 0,
-				    current_time_us - frame->first_packet_time_us,
-				    frame->buffer->priv->frame_id);
+				    g_get_monotonic_time () - frame->first_packet_time_us,
+				    frame->frame_id);
 	} else
 		thread_data->statistic_count++;
 
