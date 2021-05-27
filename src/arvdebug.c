@@ -149,7 +149,7 @@ arv_debug_with_level (ArvDebugCategory category, ArvDebugLevel level, const char
 
 	now = g_get_real_time ();
 	now_secs = (time_t) (now / 1000000);
-	localtime_r (&now_secs, &now_tm);
+	localtime_s (&now_secs, &now_tm);
 	strftime (time_buf, sizeof (time_buf), "%H:%M:%S", &now_tm);
 
 	if (stderr_has_color_support ())
