@@ -781,6 +781,11 @@ arv_camera_abort_acquisition (ArvCamera *camera, GError **error)
  *
  * Acquire one image buffer.
  *
+ * <warning>
+ *   <para>arv_camera_acquisition() sets the camera in SingleFrame acquisition mode. You may have to put back the camera in
+ *   Continuous acquisition mode for later operations, using arv_camera_set_acquisition_mode().</para>
+ * </warning>
+ *
  * Returns: (transfer full): A new #ArvBuffer, NULL on error. The returned buffer must be freed using g_object_unref().
  *
  * Since: 0.8.0
@@ -802,6 +807,12 @@ arv_camera_acquisition (ArvCamera *camera, guint64 timeout, GError **error)
 		if (local_error == NULL) {
 			arv_stream_push_buffer (stream,  arv_buffer_new (payload, NULL));
 			arv_camera_set_acquisition_mode (camera, ARV_ACQUISITION_MODE_SINGLE_FRAME, &local_error);
+                        if (local_error != NULL &&
+                            local_error->code == ARV_GC_ERROR_ENUM_ENTRY_NOT_FOUND) {
+                                g_clear_error (&local_error);
+                                /* Some cameras don't support SingleFrame, fall back to Continuous */
+                                arv_camera_set_acquisition_mode (camera, ARV_ACQUISITION_MODE_CONTINUOUS, &local_error);
+                        }
 		}
 		if (local_error == NULL)
 			arv_camera_start_acquisition (camera, &local_error);
@@ -979,11 +990,12 @@ arv_camera_set_frame_rate (ArvCamera *camera, double frame_rate, GError **error)
 	switch (priv->vendor) {
 		case ARV_CAMERA_VENDOR_BASLER:
 			/* Disabling AcquisitionStart is required on some Basler cameras. Just ignore a failure. */
-			arv_camera_set_string (camera, "TriggerSelector", "AcquisitionStart", &local_error);
-			if (local_error == NULL)
-				arv_camera_set_string (camera, "TriggerMode", "Off", &local_error);
-			else
-				g_clear_error (&local_error);
+                        if (arv_camera_is_enumeration_entry_available (camera, "TriggerSelector", "AcquisitionStart",
+                                                                       &local_error)) {
+                                arv_camera_set_string (camera, "TriggerSelector", "AcquisitionStart", &local_error);
+                                if (local_error == NULL)
+                                        arv_camera_set_string (camera, "TriggerMode", "Off", &local_error);
+                        }
 
 			if (local_error == NULL)
 				arv_camera_set_string (camera, "TriggerSelector", "FrameStart", &local_error);
@@ -1053,22 +1065,34 @@ arv_camera_set_frame_rate (ArvCamera *camera, double frame_rate, GError **error)
 		case ARV_CAMERA_VENDOR_XIMEA:
 		case ARV_CAMERA_VENDOR_MATRIX_VISION:
 		case ARV_CAMERA_VENDOR_UNKNOWN:
-			arv_camera_set_string (camera, "TriggerSelector", "FrameStart", &local_error);
-			if (local_error == NULL)
-				arv_camera_set_string (camera, "TriggerMode", "Off", &local_error);
-			if (local_error == NULL)
-				arv_camera_set_float (camera,
-						      priv->has_acquisition_frame_rate ?
-						      "AcquisitionFrameRate":
-						      "AcquisitionFrameRateAbs", frame_rate, &local_error);
-			if (local_error == NULL) {
-				if (arv_camera_is_feature_available (camera, "AcquisitionFrameRateEnable", &local_error)) {
-					if (local_error == NULL)
-						arv_camera_set_boolean (camera, "AcquisitionFrameRateEnable", TRUE, &local_error);
-				}
-			}
-			break;
-	}
+                        if (local_error == NULL &&
+                            arv_camera_is_enumeration_entry_available (camera, "TriggerSelector", "FrameStart",
+                                                                       &local_error)) {
+                                arv_camera_set_string (camera, "TriggerSelector", "FrameStart", &local_error);
+                                if (local_error == NULL)
+                                        arv_camera_set_string (camera, "TriggerMode", "Off", &local_error);
+                        }
+                        if (local_error == NULL &&
+                            arv_camera_is_enumeration_entry_available (camera, "TriggerSelector", "AcquisitionStart",
+                                                                       &local_error)) {
+                                arv_camera_set_string (camera, "TriggerSelector", "AcquisitionStart", &local_error);
+                                if (local_error == NULL)
+                                        arv_camera_set_string (camera, "TriggerMode", "Off", &local_error);
+                        }
+
+                        if (local_error == NULL)
+                                arv_camera_set_float (camera,
+                                                      priv->has_acquisition_frame_rate ?
+                                                      "AcquisitionFrameRate":
+                                                      "AcquisitionFrameRateAbs", frame_rate, &local_error);
+                        if (local_error == NULL) {
+                                if (arv_camera_is_feature_available (camera, "AcquisitionFrameRateEnable", &local_error)) {
+                                        if (local_error == NULL)
+                                                arv_camera_set_boolean (camera, "AcquisitionFrameRateEnable", TRUE, &local_error);
+                                }
+                        }
+                        break;
+        }
 
 	if (local_error != NULL)
 		g_propagate_error (error, local_error);
@@ -1225,6 +1249,7 @@ arv_camera_set_trigger (ArvCamera *camera, const char *source, GError **error)
 {
 	ArvCameraPrivate *priv = arv_camera_get_instance_private (camera);
 	GError *local_error = NULL;
+	gboolean has_frame_start = TRUE;
 
 	g_return_if_fail (ARV_IS_CAMERA (camera));
 	g_return_if_fail (source != NULL);
@@ -1232,22 +1257,30 @@ arv_camera_set_trigger (ArvCamera *camera, const char *source, GError **error)
 	if (priv->vendor == ARV_CAMERA_VENDOR_BASLER)
 		arv_camera_set_boolean (camera, "AcquisitionFrameRateEnable", FALSE, &local_error);
 
-	if (local_error == NULL)
+	if (local_error == NULL &&
+           arv_camera_is_enumeration_entry_available (camera, "TriggerSelector", "FrameStart", &local_error)) {
+                arv_camera_set_string (camera, "TriggerSelector", "FrameStart", &local_error);
+                if (local_error == NULL)
+                        arv_camera_set_string (camera, "TriggerMode", "On", &local_error);
+        } else {
+                has_frame_start = FALSE;
+        }
+
+	if (local_error == NULL &&
+           arv_camera_is_enumeration_entry_available (camera, "TriggerSelector", "AcquisitionStart", &local_error)) {
 		arv_camera_set_string (camera, "TriggerSelector", "AcquisitionStart", &local_error);
-	if (local_error == NULL)
-		arv_camera_set_string (camera, "TriggerMode", "Off", &local_error);
+                if (local_error == NULL)
+                        arv_camera_set_string (camera, "TriggerMode",
+					       has_frame_start ? "Off" : "On", &local_error);
+        }
 
-	if (local_error != NULL && local_error->code == ARV_GC_ERROR_ENUM_ENTRY_NOT_FOUND)
-		g_clear_error (&local_error);
+        if (local_error == NULL
+            && arv_camera_is_enumeration_entry_available (camera, "TriggerActivation", "RisingEdge", &local_error)) {
+                arv_camera_set_string (camera, "TriggerActivation", "RisingEdge", &local_error);
+        }
 
-	if (local_error == NULL)
-		arv_camera_set_string (camera, "TriggerSelector", "FrameStart", &local_error);
-	if (local_error == NULL)
-		arv_camera_set_string (camera, "TriggerMode", "On", &local_error);
-	if (local_error == NULL)
-		arv_camera_set_string (camera, "TriggerActivation", "RisingEdge", &local_error);
-	if (local_error == NULL)
-		arv_camera_set_string (camera, "TriggerSource", source, &local_error);
+        if (local_error == NULL)
+                arv_camera_set_string (camera, "TriggerSource", source, &local_error);
 
 	if (local_error != NULL)
 		g_propagate_error (error, local_error);
@@ -2253,6 +2286,28 @@ arv_camera_get_float_bounds (ArvCamera *camera, const char *feature, double *min
 }
 
 /**
+ * arv_camera_get_float_increment:
+ * @camera: a #ArvCamera
+ * @feature: feature name
+ * @error: a #GError placeholder, %NULL to ignore
+ *
+ * Returns: @feature value increment, or #G_MINDOUBLE on error.
+ *
+ * Since: 0.8.16
+ */
+
+double
+arv_camera_get_float_increment (ArvCamera *camera, const char *feature, GError **error)
+{
+	ArvCameraPrivate *priv = arv_camera_get_instance_private (camera);
+
+	g_return_val_if_fail (ARV_IS_CAMERA (camera), 1);
+	g_return_val_if_fail (feature != NULL, 1);
+
+	return arv_device_get_float_feature_increment (priv->device, feature, error);
+}
+
+/**
  * arv_camera_dup_available_enumerations:
  * @camera: a #ArvCamera
  * @feature: feature name
@@ -2334,6 +2389,28 @@ arv_camera_dup_available_enumerations_as_display_names (ArvCamera *camera, const
 	g_return_val_if_fail (ARV_IS_CAMERA (camera), NULL);
 
 	return arv_device_dup_available_enumeration_feature_values_as_display_names (priv->device, feature, n_values, error);
+}
+
+/**
+ * arv_camera_is_enumeration_entry_available:
+ * @camera: a #ArvCamera
+ * @feature: enumeration feature name
+ * @entry: entry name
+ * @error: a #GError placeholder, %NULL to ignore
+ *
+ * Returns: %TRUE if the feature and the feature entry are available
+ *
+ * Since: 0.8.17
+ */
+
+gboolean
+arv_camera_is_enumeration_entry_available (ArvCamera *camera, const char *feature, const char *entry, GError **error)
+{
+	ArvCameraPrivate *priv = arv_camera_get_instance_private (camera);
+
+        g_return_val_if_fail (ARV_IS_CAMERA (camera), FALSE);
+
+        return arv_device_is_enumeration_entry_available (priv->device, feature, entry, error);
 }
 
 /**
@@ -2843,7 +2920,11 @@ arv_camera_uv_get_bandwidth_bounds (ArvCamera *camera, guint *min, guint *max, G
 gboolean
 arv_camera_are_chunks_available	(ArvCamera *camera, GError **error)
 {
-	return arv_camera_is_feature_available (camera, "ChunkModeActive", error);
+	ArvCameraPrivate *priv = arv_camera_get_instance_private (camera);
+
+        if (!arv_camera_is_feature_available (camera, "ChunkModeActive", error))
+                return FALSE;
+        return ARV_IS_GC_ENUMERATION (arv_device_get_feature (priv->device, "ChunkSelector"));
 }
 
 /**
@@ -3127,6 +3208,8 @@ arv_camera_constructed (GObject *object)
 	const char *vendor_name;
 	const char *model_name;
 	GError *error = NULL;
+
+        G_OBJECT_CLASS (arv_camera_parent_class)->constructed (object);
 
 	priv = arv_camera_get_instance_private (camera);
 

@@ -1,3 +1,57 @@
+Stable release 0.8.16
+=====================
+
+  * ci: use Github actions for linux and macOS (Emmanuel)
+  * ci: minGW support (Václav)
+  * gigevision: use proper broadcast addressese during discovery (Václav)
+  * camera: accessor to float feature increment (Emmanuel)
+  * camera: make set_trigger more robust (Emmanuel)
+  * camera: fallback to Continuous mode if SingleFrame is not available
+    (Emmanuel)
+  * viewer: allow to save a snapshot as png or jpeg image (Emmanuel)
+  * viewer: display all pixel formats in selector (Emmanuel)
+  * simulator: now works on Windows and macOS (Václav, Emmanuel)
+  * debug: fix output on Windows (Václav)
+  * doc: Windows build documentation (Václav)
+  * tests: new arv-test application for automated testing (Emmanuel)
+
+Stable release 0.8.15
+=====================
+
+  * gigevision: only disable packet resend after a packet unavailable error
+  * gigevision: add a new packet timeout for first packet resend request
+  * doc: improve GvStream property documentation
+  * code cleanup
+
+Stable release 0.8.14
+=====================
+
+  * debug: fix debug timestamp on older platforms (Emmanuel)
+
+Stable release 0.8.13
+=====================
+
+  * viewer: fix incorrect bandwith and frame rate computation
+
+Stable release 0.8.12
+=====================
+
+  * usb3vision: initialize stream infos
+
+Stable release 0.8.11
+=====================
+
+  * stream: add an extensible info API (Emmanuel)
+  * gvstream: improve packet resend request behaviour in case of unordered gvsp
+    packets (Emmanuel)
+  * gvstream: wait for thread setup during ArvGvStream initialization (Emmanuel)
+  * gigevision: use MAC as serial number fallback (Emmanuel)
+  * genicam: fix arv_exposure_mode_to_string (Martin)
+  * usb3vision: improve error reporting in case of libsub error (Emmanuel)
+  * usb3vision: automatically detach kernel driver (Emmanuel)
+  * cameratest: add a test duration parameter (Emmanuel)
+  * misc: rename internal ArvStatistic to ArvHistogram (Emmanuel)
+
 Stable release 0.8.10
 =====================
 

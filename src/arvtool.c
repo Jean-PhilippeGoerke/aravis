@@ -274,8 +274,16 @@ arv_tool_execute_command (int argc, char **argv, ArvDevice *device,
 			feature = arv_device_get_feature (device, tokens[0]);
 			if (ARV_IS_GC_FEATURE_NODE (feature)) {
 				if (ARV_IS_GC_COMMAND (feature)) {
-					arv_gc_command_execute (ARV_GC_COMMAND (feature), NULL);
-					printf ("%s executed\n", tokens[0]);
+					GError *error = NULL;
+
+					arv_gc_command_execute (ARV_GC_COMMAND (feature), &error);
+					if (error != NULL) {
+							printf ("%s execute error: %s\n",
+								tokens[0],
+								error->message);
+							g_clear_error (&error);
+					} else
+                                                printf ("%s executed\n", tokens[0]);
 				} else {
 					const char *unit;
 					GError *error = NULL;
@@ -340,7 +348,7 @@ arv_tool_execute_command (int argc, char **argv, ArvDevice *device,
 									g_string_append_printf (string, " min:%g", min_double);
 								if (max_double != G_MAXDOUBLE)
 									g_string_append_printf (string, " max:%g", max_double);
-								if (inc_double != 1)
+								if (inc_double != G_MINDOUBLE)
 									g_string_append_printf (string, " inc:%g", inc_double);
 
 								printf ("%s\n", string->str);

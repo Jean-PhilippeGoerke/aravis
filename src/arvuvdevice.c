@@ -672,8 +672,17 @@ _open_usb_device (ArvUvDevice *uv_device, GError **error)
 				struct libusb_endpoint_descriptor endpoint;
 				const struct libusb_interface *inter;
 				const struct libusb_interface_descriptor *interdesc;
+                                int result;
 
 				priv->usb_device = usb_device;
+
+                                result = libusb_set_auto_detach_kernel_driver (usb_device, 1);
+                                if (result != 0) {
+                                        arv_warning_device ("Failed to set auto kernel detach feature "
+                                                            "for USB device '%s-%s-%s': %s",
+                                                            priv->vendor, priv->product, priv->serial_number,
+                                                            libusb_error_name (result));
+                                }
 
 				libusb_get_config_descriptor (devices[i], 0, &config);
 				for (j = 0; j < (int) config->bNumInterfaces; j++) {
@@ -744,6 +753,9 @@ arv_uv_device_constructed (GObject *object)
 	ArvUvDevice *uv_device = ARV_UV_DEVICE (object);
 	ArvUvDevicePrivate *priv = arv_uv_device_get_instance_private (uv_device);
 	GError *error = NULL;
+        int result;
+
+        G_OBJECT_CLASS (arv_uv_device_parent_class)->constructed (object);
 
 	arv_info_device ("[UvDevice::new] Vendor  = %s", priv->vendor);
 	arv_info_device ("[UvDevice::new] Product = %s", priv->product);
@@ -755,7 +767,7 @@ arv_uv_device_constructed (GObject *object)
 
 	if (!_open_usb_device (uv_device, &error)) {
 		arv_device_take_init_error (ARV_DEVICE (uv_device), error);
-		error = NULL;
+                return;
 	}
 
 	arv_info_device("[UvDevice::new] Using control endpoint %d, interface %d",
@@ -763,28 +775,42 @@ arv_uv_device_constructed (GObject *object)
 	arv_info_device("[UvDevice::new] Using data endpoint %d, interface %d",
 			 priv->data_endpoint, priv->data_interface);
 
-	if (priv->usb_device == NULL ||
-	    libusb_claim_interface (priv->usb_device, priv->control_interface) < 0 ||
-	    libusb_claim_interface (priv->usb_device, priv->data_interface) < 0) {
-		arv_device_take_init_error (ARV_DEVICE (uv_device), g_error_new (ARV_DEVICE_ERROR, ARV_DEVICE_ERROR_PROTOCOL_ERROR,
-										 "Failed to claim USB interface to '%s:%s:%s'",
-										 priv->vendor, priv->product, priv->serial_number));
-		return;
-	}
+        result = libusb_claim_interface (priv->usb_device, priv->control_interface);
+        if (result != 0) {
+		arv_device_take_init_error (ARV_DEVICE (uv_device),
+                                            g_error_new (ARV_DEVICE_ERROR, ARV_DEVICE_ERROR_PROTOCOL_ERROR,
+                                                         "Failed to claim USB interface to '%s-%s-%s': %s",
+                                                         priv->vendor, priv->product, priv->serial_number,
+                                                         libusb_error_name (result)));
+                return;
+        }
+
+        result = libusb_claim_interface (priv->usb_device, priv->data_interface);
+        if (result != 0) {
+		arv_device_take_init_error (ARV_DEVICE (uv_device),
+                                            g_error_new (ARV_DEVICE_ERROR, ARV_DEVICE_ERROR_PROTOCOL_ERROR,
+                                                         "Failed to claim USB interface to '%s-%s-%s': %s",
+                                                         priv->vendor, priv->product, priv->serial_number,
+                                                         libusb_error_name (result)));
+                return;
+        }
+
 
 	if ( !_bootstrap (uv_device)){
-		arv_device_take_init_error (ARV_DEVICE (uv_device), g_error_new (ARV_DEVICE_ERROR, ARV_DEVICE_ERROR_PROTOCOL_ERROR,
-										 "Failed to bootstrap USB device '%s:%s:%s'",
-										 priv->vendor, priv->product, priv->serial_number));
-		return;
-	}
+		arv_device_take_init_error (ARV_DEVICE (uv_device),
+                                            g_error_new (ARV_DEVICE_ERROR, ARV_DEVICE_ERROR_PROTOCOL_ERROR,
+                                                         "Failed to bootstrap USB device '%s-%s-%s'",
+                                                         priv->vendor, priv->product, priv->serial_number));
+                return;
+        }
 
 	if (!ARV_IS_GC (priv->genicam)) {
-		arv_device_take_init_error (ARV_DEVICE (uv_device), g_error_new (ARV_DEVICE_ERROR, ARV_DEVICE_ERROR_GENICAM_NOT_FOUND,
-										 "Failed to load Genicam data for USB device '%s:%s:%s'",
-										 priv->vendor, priv->product, priv->serial_number));
-		return;
-	}
+		arv_device_take_init_error (ARV_DEVICE (uv_device),
+                                            g_error_new (ARV_DEVICE_ERROR, ARV_DEVICE_ERROR_GENICAM_NOT_FOUND,
+                                                         "Failed to load Genicam data for USB device '%s-%s-%s'",
+                                                         priv->vendor, priv->product, priv->serial_number));
+                return;
+        }
 
 	reset_endpoint (priv->usb_device, priv->data_endpoint, LIBUSB_ENDPOINT_IN);
 }

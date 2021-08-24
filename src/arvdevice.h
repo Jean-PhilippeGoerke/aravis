@@ -120,6 +120,7 @@ gint64		arv_device_get_integer_feature_increment(ArvDevice *device, const char *
 void		arv_device_set_float_feature_value	(ArvDevice *device, const char *feature, double value, GError **error);
 double		arv_device_get_float_feature_value	(ArvDevice *device, const char *feature, GError **error);
 void 		arv_device_get_float_feature_bounds 	(ArvDevice *device, const char *feature, double *min, double *max, GError **error);
+double          arv_device_get_float_feature_increment  (ArvDevice *device, const char *feature, GError **error);
 
 gint64 *	arv_device_dup_available_enumeration_feature_values			(ArvDevice *device, const char *feature,
 											 guint *n_values, GError **error);
@@ -127,7 +128,10 @@ const char **	arv_device_dup_available_enumeration_feature_values_as_strings		(A
 											 guint *n_values, GError **error);
 const char **	arv_device_dup_available_enumeration_feature_values_as_display_names	(ArvDevice *device, const char *feature,
 											 guint *n_values, GError **error);
-
+gboolean        arv_device_is_enumeration_entry_available                               (ArvDevice *device,
+                                                                                         const char *feature,
+                                                                                         const char *entry,
+                                                                                         GError **error);
 
 gboolean 	arv_device_set_features_from_string 	(ArvDevice *device, const char *string, GError **error);
 
